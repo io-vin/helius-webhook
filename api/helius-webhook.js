@@ -1,54 +1,24 @@
-import { buffer } from 'micro';
-
-export const config = {
-  api: {
-    bodyParser: false, // Disattiva il body parser di Next.js
-  },
-};
-
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // 🧠 Prende il body grezzo
-    const rawBody = await buffer(req);
-    const bodyText = rawBody.toString('utf8').trim();
+    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-    console.log("📦 Raw buffer length:", rawBody.length);
-    console.log("📦 Raw buffer (utf8):", bodyText);
-
-    // ❌ Se il body è vuoto, termina
-    if (!bodyText || bodyText.length < 5) {
-      return res.status(400).json({ error: 'Empty or invalid JSON body' });
+    if (!Array.isArray(payload) || !payload[0]?.accountData) {
+      console.log("❌ Payload format not valid:", JSON.stringify(payload, null, 2));
+      return res.status(400).json({ error: 'Invalid payload format: expected array with accountData' });
     }
 
-    // 🔄 Tenta il parsing JSON
-    let payload;
-    try {
-      payload = JSON.parse(bodyText);
-    } catch (err) {
-      console.error("❌ Errore nel parsing JSON:", err.message);
-      return res.status(400).json({ error: 'Invalid JSON format' });
-    }
+    const accountData = payload[0].accountData;
 
-    // ✅ Verifica struttura payload
-    if (!payload?.accountData || !Array.isArray(payload.accountData)) {
-      console.log("❌ Payload senza accountData:", JSON.stringify(payload));
-      return res.status(400).json({ error: 'Expected object with accountData array' });
-    }
-
-    const accountData = payload.accountData;
-
-    // 🎯 Token da ignorare (SOL, USDC, USDT)
     const excludedMints = [
-      'So11111111111111111111111111111111111111112',
-      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
+      'So11111111111111111111111111111111111111112', // Wrapped SOL
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'  // USDT
     ];
 
-    // 🔍 Variabili da riempire
     let buyer = null;
     let tokenMint = null;
     let tokenAmount = null;
@@ -59,12 +29,10 @@ export default async function handler(req, res) {
       if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
         const tokenInfo = acc.tokenBalanceChanges[0];
 
-        if (!tokenInfo?.mint || excludedMints.includes(tokenInfo.mint)) {
-          console.log("⚠️ Token escluso:", tokenInfo?.mint);
+        if (excludedMints.includes(tokenInfo.mint)) {
+          // ❌ Ignora token esclusi
           return res.status(200).json({ status: 'ignored excluded token' });
         }
-
-        if (!tokenInfo.rawTokenAmount) continue;
 
         buyer = tokenInfo.userAccount;
         tokenMint = tokenInfo.mint;
@@ -79,13 +47,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // 🛑 Se non è un BUY, esce
     if (!buyer || !tokenMint || !tokenAmount || !solSpent) {
-      console.log("⛔ Dati incompleti o non è un BUY.");
       return res.status(200).json({ status: 'not a buy or incomplete data' });
     }
 
-    // ✅ Format dei valori
     const amountFormatted = (Number(tokenAmount) / Math.pow(10, decimals)).toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 6
@@ -93,7 +58,6 @@ export default async function handler(req, res) {
 
     const solFormatted = `~${solSpent.toFixed(4)} SOL`;
 
-    // 📨 Messaggio per Discord
     const content = `🆕 Buy detected on InternetMoneyMafia\n` +
       `💰 Buyer: ${buyer}\n` +
       `📦 Token: ${tokenMint}\n` +
@@ -108,13 +72,10 @@ export default async function handler(req, res) {
       body: JSON.stringify({ content }),
     });
 
-    console.log("✅ Messaggio inviato a Discord");
-
     return res.status(200).json({ status: 'ok' });
 
   } catch (err) {
-    console.error("❌ Errore generale:", err.message);
-    console.error(err.stack);
-    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+    console.error("❌ Errore nella funzione webhook:", err);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 }

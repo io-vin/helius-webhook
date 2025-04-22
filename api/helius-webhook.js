@@ -6,9 +6,11 @@ export default async function handler(req, res) {
 
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-    if (!Array.isArray(payload)) {
-      return res.status(400).json({ error: 'Expected payload to be an array' });
+    if (!payload || !Array.isArray(payload.accountData)) {
+      return res.status(400).json({ error: 'Invalid payload format: expected "accountData" as an array' });
     }
+
+    const accountData = payload.accountData;
 
     let buyer = null;
     let tokenMint = null;
@@ -16,21 +18,17 @@ export default async function handler(req, res) {
     let decimals = null;
     let solSpent = null;
 
-    for (const entry of payload) {
-      if (entry.accountData && Array.isArray(entry.accountData)) {
-        for (const acc of entry.accountData) {
-          if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
-            const tokenInfo = acc.tokenBalanceChanges[0];
-            buyer = tokenInfo.userAccount;
-            tokenMint = tokenInfo.mint;
-            tokenAmount = tokenInfo.rawTokenAmount.tokenAmount;
-            decimals = tokenInfo.rawTokenAmount.decimals;
-          }
+    for (const acc of accountData) {
+      if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
+        const tokenInfo = acc.tokenBalanceChanges[0];
+        buyer = tokenInfo.userAccount;
+        tokenMint = tokenInfo.mint;
+        tokenAmount = tokenInfo.rawTokenAmount.tokenAmount;
+        decimals = tokenInfo.rawTokenAmount.decimals;
+      }
 
-          if (acc.account === buyer && acc.nativeBalanceChange < 0) {
-            solSpent = Math.abs(acc.nativeBalanceChange) / 1e9;
-          }
-        }
+      if (acc.account === buyer && acc.nativeBalanceChange < 0) {
+        solSpent = Math.abs(acc.nativeBalanceChange) / 1e9;
       }
     }
 

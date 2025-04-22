@@ -19,12 +19,13 @@ export default async function handler(req, res) {
           color: 0x00ff00,
           timestamp: new Date().toISOString(),
           fields: [
-            { name: "Tipo evento", value: payload.type || "N/A" },
-            { name: "Signature", value: payload.signature || "N/A" },
-            { name: "Slot", value: String(payload.slot || "N/A") }
+            {
+              name: "Payload completo",
+              value: "```json\n" + JSON.stringify(payload, null, 2).slice(0, 1000) + "\n```"
+            }
           ],
           footer: {
-            text: "OuroBot"
+            text: "Powered by Helius x BetBlaze"
           }
         }
       ]

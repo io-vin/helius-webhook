@@ -4,7 +4,8 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const payload = req.body;
+    // Parsing del body (fix per Vercel)
+    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
     if (!payload || typeof payload !== 'object') {
       return res.status(400).json({ error: 'Invalid JSON body' });
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
             { name: "Slot", value: String(payload.slot || "N/A") }
           ],
           footer: {
-            text: "Powered by Helius x BetBlaze"
+            text: "OuroBot"
           }
         }
       ]

@@ -4,39 +4,59 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // Parsing del body (fix per Vercel)
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-    if (!payload || typeof payload !== 'object') {
-      return res.status(400).json({ error: 'Invalid JSON body' });
+    if (!Array.isArray(payload)) {
+      return res.status(400).json({ error: 'Expected payload to be an array' });
     }
 
-    const embed = {
-      username: "Helius Webhook",
-      embeds: [
-        {
-          title: "📡 Nuovo Webhook Ricevuto",
-          color: 0x00ff00,
-          timestamp: new Date().toISOString(),
-          fields: [
-            {
-              name: "Payload completo",
-              value: "```json\n" + JSON.stringify(payload, null, 2).slice(0, 1000) + "\n```"
-            }
-          ],
-          footer: {
-            text: "Powered by Helius x BetBlaze"
+    let buyer = null;
+    let tokenMint = null;
+    let tokenAmount = null;
+    let decimals = null;
+    let solSpent = null;
+
+    for (const entry of payload) {
+      if (entry.accountData && Array.isArray(entry.accountData)) {
+        for (const acc of entry.accountData) {
+          if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
+            const tokenInfo = acc.tokenBalanceChanges[0];
+            buyer = tokenInfo.userAccount;
+            tokenMint = tokenInfo.mint;
+            tokenAmount = tokenInfo.rawTokenAmount.tokenAmount;
+            decimals = tokenInfo.rawTokenAmount.decimals;
+          }
+
+          if (acc.account === buyer && acc.nativeBalanceChange < 0) {
+            solSpent = Math.abs(acc.nativeBalanceChange) / 1e9;
           }
         }
-      ]
-    };
+      }
+    }
+
+    if (!buyer || !tokenMint || !tokenAmount) {
+      return res.status(400).json({ error: 'Missing required token transfer info' });
+    }
+
+    const amountFormatted = (Number(tokenAmount) / Math.pow(10, decimals)).toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 6
+    });
+
+    const solFormatted = solSpent ? `~${solSpent.toFixed(4)} SOL` : 'N/A';
+
+    const content = `🆕 Buy detected on InternetMoneyMafia\n` +
+      `💰 Buyer: ${buyer}\n` +
+      `📦 Token: ${tokenMint}\n` +
+      `📊 Amount: ${amountFormatted}\n` +
+      `💵 Spent: ${solFormatted}`;
 
     const discordWebhookURL = "https://discord.com/api/webhooks/1364346213402546240/QKSJ3TTP6t31POZRovyn4XtMCEqw2wwCxDUJoF1xCG2h6HYOc-BMG8T5VSs7BLIQIC9l";
 
     await fetch(discordWebhookURL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(embed),
+      body: JSON.stringify({ content }),
     });
 
     return res.status(200).json({ status: 'ok' });

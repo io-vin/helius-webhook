@@ -6,12 +6,18 @@ export default async function handler(req, res) {
 
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-    // ✅ ora gestiamo correttamente: [{ accountData: [...] }]
     if (!Array.isArray(payload) || !payload[0]?.accountData) {
+      console.log("❌ Payload format not valid:", JSON.stringify(payload, null, 2));
       return res.status(400).json({ error: 'Invalid payload format: expected array with accountData' });
     }
 
     const accountData = payload[0].accountData;
+
+    const excludedMints = [
+      'So11111111111111111111111111111111111111112', // Wrapped SOL
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'  // USDT
+    ];
 
     let buyer = null;
     let tokenMint = null;
@@ -22,19 +28,27 @@ export default async function handler(req, res) {
     for (const acc of accountData) {
       if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
         const tokenInfo = acc.tokenBalanceChanges[0];
+
+        if (excludedMints.includes(tokenInfo.mint)) {
+          // ❌ Ignora token esclusi
+          return res.status(200).json({ status: 'ignored excluded token' });
+        }
+
         buyer = tokenInfo.userAccount;
         tokenMint = tokenInfo.mint;
         tokenAmount = tokenInfo.rawTokenAmount.tokenAmount;
         decimals = tokenInfo.rawTokenAmount.decimals;
       }
+    }
 
+    for (const acc of accountData) {
       if (acc.account === buyer && acc.nativeBalanceChange < 0) {
         solSpent = Math.abs(acc.nativeBalanceChange) / 1e9;
       }
     }
 
-    if (!buyer || !tokenMint || !tokenAmount) {
-      return res.status(400).json({ error: 'Missing required token transfer info' });
+    if (!buyer || !tokenMint || !tokenAmount || !solSpent) {
+      return res.status(200).json({ status: 'not a buy or incomplete data' });
     }
 
     const amountFormatted = (Number(tokenAmount) / Math.pow(10, decimals)).toLocaleString('en-US', {
@@ -42,7 +56,7 @@ export default async function handler(req, res) {
       maximumFractionDigits: 6
     });
 
-    const solFormatted = solSpent ? `~${solSpent.toFixed(4)} SOL` : 'N/A';
+    const solFormatted = `~${solSpent.toFixed(4)} SOL`;
 
     const content = `🆕 Buy detected on InternetMoneyMafia\n` +
       `💰 Buyer: ${buyer}\n` +

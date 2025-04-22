@@ -2,7 +2,7 @@ import { buffer } from 'micro';
 
 export const config = {
   api: {
-    bodyParser: false, // Obbligatorio per usare `buffer` da micro
+    bodyParser: false, // Serve per usare `buffer`
   },
 };
 
@@ -12,15 +12,29 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // 📦 Legge il corpo grezzo
     const rawBody = await buffer(req);
-    const payload = JSON.parse(rawBody.toString());
+    const bodyText = rawBody.toString().trim();
 
-    // ✅ Debug iniziale
-    console.log("🔥 PAYLOAD RICEVUTO 🔥", JSON.stringify(payload, null, 2));
+    console.log("📦 Body raw ricevuto:", bodyText);
 
+    if (!bodyText || bodyText.length < 5) {
+      console.log("❌ Body vuoto o troppo corto");
+      return res.status(400).json({ error: 'Empty or invalid JSON body' });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(bodyText);
+    } catch (jsonErr) {
+      console.error("❌ Errore nel parsing JSON:", jsonErr.message);
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+
+    // ✅ Verifica struttura prevista
     if (!payload?.accountData || !Array.isArray(payload.accountData)) {
       console.log("❌ Formato non valido:", JSON.stringify(payload));
-      return res.status(400).json({ error: 'Invalid payload format: expected object with accountData array' });
+      return res.status(400).json({ error: 'Expected object with accountData array' });
     }
 
     const accountData = payload.accountData;
@@ -41,10 +55,8 @@ export default async function handler(req, res) {
       if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
         const tokenInfo = acc.tokenBalanceChanges[0];
 
-        console.log("🔍 tokenInfo:", tokenInfo);
-
-        if (excludedMints.includes(tokenInfo.mint)) {
-          console.log("⚠️ Token escluso:", tokenInfo.mint);
+        if (!tokenInfo?.mint || excludedMints.includes(tokenInfo.mint)) {
+          console.log("⚠️ Token escluso o senza mint:", tokenInfo?.mint);
           return res.status(200).json({ status: 'ignored excluded token' });
         }
 
@@ -65,11 +77,6 @@ export default async function handler(req, res) {
         solSpent = Math.abs(acc.nativeBalanceChange) / 1e9;
       }
     }
-
-    console.log("✅ Buyer:", buyer);
-    console.log("✅ Token:", tokenMint);
-    console.log("✅ Token amount:", tokenAmount);
-    console.log("✅ Spent in SOL:", solSpent);
 
     if (!buyer || !tokenMint || !tokenAmount || !solSpent) {
       console.log("⚠️ Dati incompleti o non è un BUY.");
@@ -97,12 +104,12 @@ export default async function handler(req, res) {
       body: JSON.stringify({ content }),
     });
 
-    console.log("✅ Messaggio inviato a Discord");
+    console.log("✅ Messaggio inviato su Discord");
 
     return res.status(200).json({ status: 'ok' });
 
   } catch (err) {
-    console.error("❌ Errore nella funzione webhook:", err.message);
+    console.error("❌ Crash interno:", err.message);
     console.error(err.stack);
     return res.status(500).json({ error: err.message || 'Internal Server Error' });
   }

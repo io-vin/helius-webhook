@@ -6,11 +6,12 @@ export default async function handler(req, res) {
 
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-    if (!payload || !Array.isArray(payload.accountData)) {
-      return res.status(400).json({ error: 'Invalid payload format: expected "accountData" as an array' });
+    // ✅ ora gestiamo correttamente: [{ accountData: [...] }]
+    if (!Array.isArray(payload) || !payload[0]?.accountData) {
+      return res.status(400).json({ error: 'Invalid payload format: expected array with accountData' });
     }
 
-    const accountData = payload.accountData;
+    const accountData = payload[0].accountData;
 
     let buyer = null;
     let tokenMint = null;

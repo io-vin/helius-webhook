@@ -6,12 +6,13 @@ export default async function handler(req, res) {
 
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-    if (!Array.isArray(payload) || !payload[0]?.accountData) {
+    // ✅ Gestione payload come oggetto singolo con accountData
+    if (!payload?.accountData || !Array.isArray(payload.accountData)) {
       console.log("❌ Payload format not valid:", JSON.stringify(payload, null, 2));
-      return res.status(400).json({ error: 'Invalid payload format: expected array with accountData' });
+      return res.status(400).json({ error: 'Invalid payload format: expected object with accountData array' });
     }
 
-    const accountData = payload[0].accountData;
+    const accountData = payload.accountData;
 
     const excludedMints = [
       'So11111111111111111111111111111111111111112', // Wrapped SOL
@@ -30,7 +31,6 @@ export default async function handler(req, res) {
         const tokenInfo = acc.tokenBalanceChanges[0];
 
         if (excludedMints.includes(tokenInfo.mint)) {
-          // ❌ Ignora token esclusi
           return res.status(200).json({ status: 'ignored excluded token' });
         }
 

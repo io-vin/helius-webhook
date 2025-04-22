@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -8,7 +6,6 @@ export default async function handler(req, res) {
 
     const payload = req.body;
 
-    // Fallback se body è vuoto o non valido
     if (!payload || typeof payload !== 'object') {
       return res.status(400).json({ error: 'Invalid JSON body' });
     }
@@ -43,7 +40,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: 'ok' });
 
   } catch (err) {
-    console.error("Errore nella funzione webhook:", err);
+    console.error("❌ Errore nella funzione webhook:", err);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }

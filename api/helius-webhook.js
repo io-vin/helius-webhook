@@ -1,40 +1,49 @@
+import fetch from 'node-fetch';
+
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const payload = req.body;
+
+    // Fallback se body è vuoto o non valido
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+
+    const embed = {
+      username: "Helius Webhook",
+      embeds: [
+        {
+          title: "📡 Nuovo Webhook Ricevuto",
+          color: 0x00ff00,
+          timestamp: new Date().toISOString(),
+          fields: [
+            { name: "Tipo evento", value: payload.type || "N/A" },
+            { name: "Signature", value: payload.signature || "N/A" },
+            { name: "Slot", value: String(payload.slot || "N/A") }
+          ],
+          footer: {
+            text: "Powered by Helius x BetBlaze"
+          }
+        }
+      ]
+    };
+
+    const discordWebhookURL = "https://discord.com/api/webhooks/1364346213402546240/QKSJ3TTP6t31POZRovyn4XtMCEqw2wwCxDUJoF1xCG2h6HYOc-BMG8T5VSs7BLIQIC9l";
+
+    await fetch(discordWebhookURL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(embed),
+    });
+
+    return res.status(200).json({ status: 'ok' });
+
+  } catch (err) {
+    console.error("Errore nella funzione webhook:", err);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
-
-  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-  if (!authHeader || authHeader !== 'our') {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  console.log('✅ Webhook ricevuto da Helius:', JSON.stringify(req.body, null, 2));
-
-  // Risponde stampando a video il payload
-  return res.status(200).json({
-    status: 'ok',
-    data: req.body,
-  });
-}
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Log degli header ricevuti per debug
-  console.log("Headers ricevuti:", req.headers);
-
-  // Supporta sia lowercase che uppercase
-  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-
-  if (!authHeader || authHeader !== 'our') {
-    console.log("Auth fallita. Header ricevuto:", authHeader);
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  console.log('✅ Webhook ricevuto da Helius:', JSON.stringify(req.body, null, 2));
-
-  // Puoi aggiungere qui qualsiasi altra logica (es. salvataggio su DB)
-
-  return res.status(200).json({ status: 'ok' });
 }

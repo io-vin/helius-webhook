@@ -2,7 +2,7 @@ import { buffer } from 'micro';
 
 export const config = {
   api: {
-    bodyParser: false, // Disattiva bodyParser di Next.js per leggere il raw body
+    bodyParser: false, // Obbligatorio per usare `buffer` da micro
   },
 };
 
@@ -12,13 +12,14 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // ✅ Parsing del raw body
     const rawBody = await buffer(req);
     const payload = JSON.parse(rawBody.toString());
 
-    // ✅ Gestione payload come oggetto singolo con accountData
+    // ✅ Debug iniziale
+    console.log("🔥 PAYLOAD RICEVUTO 🔥", JSON.stringify(payload, null, 2));
+
     if (!payload?.accountData || !Array.isArray(payload.accountData)) {
-      console.log("❌ Payload format not valid:", JSON.stringify(payload, null, 2));
+      console.log("❌ Formato non valido:", JSON.stringify(payload));
       return res.status(400).json({ error: 'Invalid payload format: expected object with accountData array' });
     }
 
@@ -40,8 +41,16 @@ export default async function handler(req, res) {
       if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
         const tokenInfo = acc.tokenBalanceChanges[0];
 
+        console.log("🔍 tokenInfo:", tokenInfo);
+
         if (excludedMints.includes(tokenInfo.mint)) {
+          console.log("⚠️ Token escluso:", tokenInfo.mint);
           return res.status(200).json({ status: 'ignored excluded token' });
+        }
+
+        if (!tokenInfo.rawTokenAmount) {
+          console.log("⚠️ Nessun rawTokenAmount, skip.");
+          continue;
         }
 
         buyer = tokenInfo.userAccount;
@@ -57,7 +66,13 @@ export default async function handler(req, res) {
       }
     }
 
+    console.log("✅ Buyer:", buyer);
+    console.log("✅ Token:", tokenMint);
+    console.log("✅ Token amount:", tokenAmount);
+    console.log("✅ Spent in SOL:", solSpent);
+
     if (!buyer || !tokenMint || !tokenAmount || !solSpent) {
+      console.log("⚠️ Dati incompleti o non è un BUY.");
       return res.status(200).json({ status: 'not a buy or incomplete data' });
     }
 
@@ -76,16 +91,19 @@ export default async function handler(req, res) {
 
     const discordWebhookURL = "https://discord.com/api/webhooks/1364346213402546240/QKSJ3TTP6t31POZRovyn4XtMCEqw2wwCxDUJoF1xCG2h6HYOc-BMG8T5VSs7BLIQIC9l";
 
-    await fetch(discordWebhookURL, {
+    const response = await fetch(discordWebhookURL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
     });
 
+    console.log("✅ Messaggio inviato a Discord");
+
     return res.status(200).json({ status: 'ok' });
 
   } catch (err) {
-    console.error("❌ Errore nella funzione webhook:", err);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    console.error("❌ Errore nella funzione webhook:", err.message);
+    console.error(err.stack);
+    return res.status(500).json({ error: err.message || 'Internal Server Error' });
   }
 }

@@ -58,18 +58,27 @@ export default async function handler(req, res) {
 
     const solFormatted = `~${solSpent.toFixed(4)} SOL`;
 
-    const content = `🆕 Buy detected on InternetMoneyMafia\n` +
-      `💰 Buyer: ${buyer}\n` +
-      `📦 Token: ${tokenMint}\n` +
-      `📊 Amount: ${amountFormatted}\n` +
-      `💵 Spent: ${solFormatted}`;
+    const embed = {
+      title: '🆕 Token detect by InternetMoneyMafia',
+      color: 0x00ff00,
+      fields: [
+        {
+          name: 'Contract Address',
+          value: `\`\`\`\n${tokenMint}\n\`\`\``,
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'Ouro Bot'
+      }
+    };
 
     const discordWebhookURL = "https://discord.com/api/webhooks/1364346213402546240/QKSJ3TTP6t31POZRovyn4XtMCEqw2wwCxDUJoF1xCG2h6HYOc-BMG8T5VSs7BLIQIC9l";
 
     await fetch(discordWebhookURL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ embeds: [embed] }),
     });
 
     return res.status(200).json({ status: 'ok' });

@@ -1,10 +1,38 @@
+import { buffer } from 'micro';
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const rawBody = await buffer(req);
+    const bodyText = rawBody.toString('utf8').trim();
+
+    console.log("📦 Raw buffer length:", rawBody.length);
+    console.log("📦 Raw buffer (utf8):", bodyText);
+
+    if (!bodyText || bodyText.length < 5) {
+      return res.status(400).json({
+        error: 'Empty or invalid JSON body',
+        length: rawBody.length,
+        contentType: req.headers['content-type'] || 'N/A',
+      });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(bodyText);
+    } catch (err) {
+      console.error("❌ JSON parse error:", err.message);
+      return res.status(400).json({ error: 'Invalid JSON format', body: bodyText });
+    }
 
     if (!Array.isArray(payload) || !payload[0]?.accountData) {
       console.log("❌ Payload format not valid:", JSON.stringify(payload, null, 2));
@@ -14,9 +42,9 @@ export default async function handler(req, res) {
     const accountData = payload[0].accountData;
 
     const excludedMints = [
-      'So11111111111111111111111111111111111111112', // Wrapped SOL
-      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
-      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'  // USDT
+      'So11111111111111111111111111111111111111112',
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
     ];
 
     let buyer = null;
@@ -30,7 +58,6 @@ export default async function handler(req, res) {
         const tokenInfo = acc.tokenBalanceChanges[0];
 
         if (excludedMints.includes(tokenInfo.mint)) {
-          // ❌ Ignora token esclusi
           return res.status(200).json({ status: 'ignored excluded token' });
         }
 
@@ -58,13 +85,25 @@ export default async function handler(req, res) {
 
     const solFormatted = `~${solSpent.toFixed(4)} SOL`;
 
-    const embed = {
+    const tokenEmbed = {
       title: '🆕 Token detect by InternetMoneyMafia',
       color: 0x00ff00,
       fields: [
         {
           name: 'Contract Address',
           value: `\`\`\`\n${tokenMint}\n\`\`\``,
+        },
+        {
+          name: 'Buyer',
+          value: buyer,
+        },
+        {
+          name: 'Amount',
+          value: `${amountFormatted}`,
+        },
+        {
+          name: 'Spent',
+          value: solFormatted,
         }
       ],
       timestamp: new Date().toISOString(),
@@ -73,12 +112,32 @@ export default async function handler(req, res) {
       }
     };
 
-    const discordWebhookURL = "https://discord.com/api/webhooks/1364346213402546240/QKSJ3TTP6t31POZRovyn4XtMCEqw2wwCxDUJoF1xCG2h6HYOc-BMG8T5VSs7BLIQIC9l";
+    const pnlEmbed = {
+      title: '📈 New Trade Registered',
+      color: 0x3498db,
+      fields: [
+        { name: 'Buyer', value: buyer },
+        { name: 'Token', value: tokenMint },
+        { name: 'Amount', value: amountFormatted },
+        { name: 'Spent (SOL)', value: solFormatted }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: { text: 'PnL Tracker' }
+    };
 
-    await fetch(discordWebhookURL, {
+    const tokenWebhookURL = "https://discord.com/api/webhooks/1364346213402546240/QKSJ3TTP6t31POZRovyn4XtMCEqw2wwCxDUJoF1xCG2h6HYOc-BMG8T5VSs7BLIQIC9l";
+    const pnlWebhookURL = "https://discord.com/api/webhooks/1364588645641879602/UscCZVbcMbol-IhZ0OM_1dj1fhS6IGe9YNKnHNt8CtWpXozMfVm5UU0f9SfdptbUquBo";
+
+    await fetch(tokenWebhookURL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ embeds: [embed] }),
+      body: JSON.stringify({ embeds: [tokenEmbed] }),
+    });
+
+    await fetch(pnlWebhookURL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [pnlEmbed] }),
     });
 
     return res.status(200).json({ status: 'ok' });

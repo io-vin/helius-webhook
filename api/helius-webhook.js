@@ -1,5 +1,8 @@
 import { buffer } from 'micro';
 
+// PnL logic
+const openPositions = new Map();
+
 export const config = {
   api: {
     bodyParser: false,
@@ -15,9 +18,6 @@ export default async function handler(req, res) {
     const rawBody = await buffer(req);
     const bodyText = rawBody.toString('utf8').trim();
 
-    console.log("📦 Raw buffer length:", rawBody.length);
-    console.log("📦 Raw buffer (utf8):", bodyText);
-
     if (!bodyText || bodyText.length < 5) {
       return res.status(400).json({
         error: 'Empty or invalid JSON body',
@@ -30,12 +30,10 @@ export default async function handler(req, res) {
     try {
       payload = JSON.parse(bodyText);
     } catch (err) {
-      console.error("❌ JSON parse error:", err.message);
       return res.status(400).json({ error: 'Invalid JSON format', body: bodyText });
     }
 
     if (!Array.isArray(payload) || !payload[0]?.accountData) {
-      console.log("❌ Payload format not valid:", JSON.stringify(payload, null, 2));
       return res.status(400).json({ error: 'Invalid payload format: expected array with accountData' });
     }
 
@@ -89,28 +87,36 @@ export default async function handler(req, res) {
       title: '🆕 Token detect by InternetMoneyMafia',
       color: 0x00ff00,
       fields: [
-        {
-          name: 'Contract Address',
-          value: `\`\`\`\n${tokenMint}\n\`\`\``,
-        },
-        {
-          name: 'Buyer',
-          value: buyer,
-        },
-        {
-          name: 'Amount',
-          value: `${amountFormatted}`,
-        },
-        {
-          name: 'Spent',
-          value: solFormatted,
-        }
+        { name: 'Contract Address', value: `\`\`\`\n${tokenMint}\n\`\`\`` },
+        { name: 'Buyer', value: buyer },
+        { name: 'Amount', value: amountFormatted },
+        { name: 'Spent', value: solFormatted }
       ],
       timestamp: new Date().toISOString(),
-      footer: {
-        text: 'Ouro Bot'
-      }
+      footer: { text: 'Ouro Bot' }
     };
+
+    // 👉 Logica di posizione aperta come nel secondo script
+    if (!openPositions.has(tokenMint)) {
+      openPositions.set(tokenMint, {
+        wallet: buyer,
+        initialPrice: solSpent / (Number(tokenAmount) / Math.pow(10, decimals)),
+        ath: solSpent / (Number(tokenAmount) / Math.pow(10, decimals)),
+        timestamp: Date.now()
+      });
+    }
+
+    const pos = openPositions.get(tokenMint);
+    const now = Date.now();
+    const durationSec = Math.floor((now - pos.timestamp) / 1000);
+    const currentPrice = solSpent / (Number(tokenAmount) / Math.pow(10, decimals));
+
+    // Aggiorna ATH se necessario
+    if (currentPrice > pos.ath) {
+      pos.ath = currentPrice;
+    }
+
+    const pnl = ((currentPrice - pos.initialPrice) / pos.initialPrice) * 100;
 
     const pnlEmbed = {
       title: '📈 New Trade Registered',
@@ -119,7 +125,12 @@ export default async function handler(req, res) {
         { name: 'Buyer', value: buyer },
         { name: 'Token', value: tokenMint },
         { name: 'Amount', value: amountFormatted },
-        { name: 'Spent (SOL)', value: solFormatted }
+        { name: 'Spent (SOL)', value: solFormatted },
+        { name: 'Initial Price', value: pos.initialPrice.toFixed(9) },
+        { name: 'Current Price', value: currentPrice.toFixed(9) },
+        { name: 'ATH', value: pos.ath.toFixed(9) },
+        { name: 'PnL (%)', value: pnl.toFixed(2) + '%' },
+        { name: 'Duration', value: durationSec + 's' }
       ],
       timestamp: new Date().toISOString(),
       footer: { text: 'PnL Tracker' }

@@ -1,4 +1,5 @@
 import { buffer } from 'micro';
+import fs from 'fs';
 
 // PnL logic
 const openPositions = new Map();
@@ -76,12 +77,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'not a buy or incomplete data' });
     }
 
-    const amountFormatted = (Number(tokenAmount) / Math.pow(10, decimals)).toLocaleString('en-US', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 6
-    });
+    const amountFormatted = (Number(tokenAmount) / Math.pow(10, decimals));
+    const initialPrice = solSpent / amountFormatted;
 
-    const solFormatted = `~${solSpent.toFixed(4)} SOL`;
+    if (!openPositions.has(tokenMint)) {
+      openPositions.set(tokenMint, {
+        wallet: buyer,
+        initialPrice,
+        ath: initialPrice,
+        timestamp: Date.now()
+      });
+    }
+
+    const pos = openPositions.get(tokenMint);
+
+    const now = Date.now();
+    const durationSec = Math.floor((now - pos.timestamp) / 1000);
+
+    const pnl = ((initialPrice - pos.initialPrice) / pos.initialPrice) * 100;
+
+    if (initialPrice > pos.ath) {
+      pos.ath = initialPrice;
+    }
 
     const tokenEmbed = {
       title: '🆕 Token detect by InternetMoneyMafia',
@@ -89,45 +106,21 @@ export default async function handler(req, res) {
       fields: [
         { name: 'Contract Address', value: `\`\`\`\n${tokenMint}\n\`\`\`` },
         { name: 'Buyer', value: buyer },
-        { name: 'Amount', value: amountFormatted },
-        { name: 'Spent', value: solFormatted }
+        { name: 'Amount', value: amountFormatted.toFixed(6) },
+        { name: 'Spent', value: `~${solSpent.toFixed(4)} SOL` }
       ],
       timestamp: new Date().toISOString(),
       footer: { text: 'Ouro Bot' }
     };
 
-    // 👉 Logica di posizione aperta come nel secondo script
-    if (!openPositions.has(tokenMint)) {
-      openPositions.set(tokenMint, {
-        wallet: buyer,
-        initialPrice: solSpent / (Number(tokenAmount) / Math.pow(10, decimals)),
-        ath: solSpent / (Number(tokenAmount) / Math.pow(10, decimals)),
-        timestamp: Date.now()
-      });
-    }
-
-    const pos = openPositions.get(tokenMint);
-    const now = Date.now();
-    const durationSec = Math.floor((now - pos.timestamp) / 1000);
-    const currentPrice = solSpent / (Number(tokenAmount) / Math.pow(10, decimals));
-
-    // Aggiorna ATH se necessario
-    if (currentPrice > pos.ath) {
-      pos.ath = currentPrice;
-    }
-
-    const pnl = ((currentPrice - pos.initialPrice) / pos.initialPrice) * 100;
-
     const pnlEmbed = {
-      title: '📈 New Trade Registered',
+      title: '📈 Trade PnL Update',
       color: 0x3498db,
       fields: [
         { name: 'Buyer', value: buyer },
         { name: 'Token', value: tokenMint },
-        { name: 'Amount', value: amountFormatted },
-        { name: 'Spent (SOL)', value: solFormatted },
         { name: 'Initial Price', value: pos.initialPrice.toFixed(9) },
-        { name: 'Current Price', value: currentPrice.toFixed(9) },
+        { name: 'Current Price', value: initialPrice.toFixed(9) },
         { name: 'ATH', value: pos.ath.toFixed(9) },
         { name: 'PnL (%)', value: pnl.toFixed(2) + '%' },
         { name: 'Duration', value: durationSec + 's' }
@@ -150,6 +143,17 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ embeds: [pnlEmbed] }),
     });
+
+    const result = `📈 Token ${tokenMint} | Wallet: ${buyer} ➡️ PnL: ${pnl.toFixed(2)}% (initial: ${pos.initialPrice.toFixed(9)}, current: ${initialPrice.toFixed(9)}, ATH: ${pos.ath?.toFixed(9)})\n\n`;
+
+    try {
+      fs.writeFileSync('./results.txt', result, { flag: 'a' });
+      console.log('✅ File scritto correttamente');
+    } catch (e) {
+      console.error('❌ Errore scrittura su file:', e.message);
+    }
+
+    openPositions.delete(tokenMint);
 
     return res.status(200).json({ status: 'ok' });
 
